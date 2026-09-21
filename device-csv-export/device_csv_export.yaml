@@ -1,0 +1,105 @@
+# =============================================================================
+# Package: Geräte-Entitäten als CSV exportieren (mit Filter und
+# automatischem Reset nach Export)
+# -----------------------------------------------------------------------------
+# Der Export läuft komplett über pyscript (device_list_updater.py), NICHT
+# über notify/shell_command/automation – die alte YAML-Methode
+# "notify: - platform: file" wurde in Home Assistant 2024.12.0 entfernt.
+#
+# Voraussetzung: Die HACS-Integration "pyscript" ist installiert und
+# eingerichtet mit "Alle Importe erlauben" UND "Home Assistant als globale
+# Variable verwenden" aktiviert. Keine weiteren HACS-Karten nötig – Filter
+# und Auswahl laufen über das native input_select-Dropdown, das von Haus
+# aus live aktualisiert.
+#
+# Installation:
+#   1. Diese Datei nach /config/packages/device_csv_export.yaml kopieren
+#      und sicherstellen, dass die configuration.yaml Packages lädt:
+#
+#        homeassistant:
+#          packages: !include_dir_named packages
+#
+#   2. Die Datei "device_list_updater.py" nach /config/pyscript/ kopieren.
+#   3. Home Assistant komplett NEU STARTEN.
+#   4. Dashboard-Karte (Beispiel ganz unten) manuell einfügen.
+# =============================================================================
+
+input_text:
+  device_csv_filter:
+    name: "Filter"
+    icon: mdi:filter-variant
+    max: 100
+    # Tippen filtert die Optionen im Dropdown darunter live (Groß-/
+    # Kleinschreibung wird ignoriert, Teilstring-Suche). Wird nach einem
+    # Export automatisch wieder geleert.
+
+input_select:
+  device_csv_auswahl:
+    name: Gerät für CSV-Export
+    icon: mdi:devices
+    options:
+      - "Bitte wählen"
+    # Diese Liste wird beim HA-Start automatisch durch
+    # pyscript/device_list_updater.py mit allen Gerätenamen befüllt und
+    # bei jeder Eingabe in input_text.device_csv_filter neu gefiltert.
+    # Wird nach einem Export automatisch auf "Bitte wählen" zurückgesetzt.
+
+input_boolean:
+  device_csv_werte_exportieren:
+    name: "Aktuelle Werte mit exportieren"
+    icon: mdi:table-column-plus-after
+    initial: true
+    # Aus  -> CSV enthält nur entity_id;name
+    # An   -> CSV enthält zusätzlich die aktuellen Zustände (state)
+
+input_button:
+  device_csv_neu:
+    name: "Neue Auswahl"
+    icon: mdi:refresh
+    # Setzt Filter, Dropdown und den CSV-Bereich sofort per Klick zurück,
+    # ohne auf Tab/Enter im Filterfeld warten zu müssen.
+
+# =============================================================================
+# Beispiel Dashboard-Karte (Lovelace, YAML-Modus):
+#
+# type: vertical-stack
+# cards:
+#   - type: entities
+#     title: Geräte-Export
+#     entities:
+#       - input_text.device_csv_filter
+#       - input_select.device_csv_auswahl
+#       - input_boolean.device_csv_werte_exportieren
+#       - input_button.device_csv_neu
+#   - type: markdown
+#     content: >
+#       {% if states('sensor.device_csv_vorschau') not in ['unknown', 'kein_geraet'] %}
+#       <a href="/local/device_entities.csv?t={{ as_timestamp(states.sensor.device_csv_vorschau.last_changed) | int }}" target="_blank"><ha-icon icon="mdi:file-download"></ha-icon> CSV herunterladen</a>
+#
+#       {{ state_attr('sensor.device_csv_vorschau', 'tabelle') }}
+#       {% endif %}
+#   - type: markdown
+#     content: >
+#       {{ state_attr('sensor.device_csv_filter_treffer', 'liste') }}
+#
+# Die Filter-Treffer-Liste steht bewusst UNTER Download/Vorschau: sie ist
+# leer, solange kein Filtertext eingegeben ist, und würde als (nach dem
+# automatischen Reset ungefilterte) lange Liste sonst Download und Vorschau
+# weit nach unten verdrängen.
+#
+# "target=_blank" öffnet die CSV in einem neuen Tab, damit der Dashboard-Tab
+# nicht navigiert wird. Der Zeitstempel-Parameter "?t=..." verhindert eine
+# gecachte, veraltete Version der Datei. Die vollständige entity_id steht
+# weiterhin in der heruntergeladenen CSV, wird in der Vorschau-Tabelle aber
+# bewusst weggelassen (siehe device_list_updater.py), da lange, nicht
+# umbrechende entity_ids sonst die Name-Spalte zusammenquetschen.
+#
+# Nach einem abgeschlossenen Export werden Filter und Dropdown automatisch
+# zurückgesetzt (siehe device_list_updater.py) – die Vorschau-Tabelle und
+# der Download-Link bleiben dabei unverändert bestehen, bis der nächste
+# Export läuft.
+# =============================================================================
+#
+# Hinweis: sensor.device_csv_vorschau wird von device_list_updater.py
+# automatisch gesetzt (keine YAML-Definition nötig).
+# =============================================================================
